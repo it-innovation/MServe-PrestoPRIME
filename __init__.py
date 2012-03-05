@@ -28,7 +28,7 @@ task_descriptions['prestoprime.tasks.mxftechmdextractor'] = {
         "nbinputs" : 1,
         "nboutputs" : 1,
         "input-0" : { "mimetype" : "application/octet-stream" },
-        "output-0" : { "mimetype" : "text/plain"},
+        "output-0" : { "mimetype" : "application/json"},
         "options":[],
         "results" : []
     }
@@ -53,6 +53,22 @@ task_descriptions['prestoprime.tasks.extractd10frame'] = {
         "input-0" : { "mimetype" : "application/octet-stream" },
         "output-0" : { "mimetype" : "image/png" },
         "options":['frame'],
+        "results" : []
+    }
+task_descriptions['prestoprime.tasks.ffprobe'] = {
+        "nbinputs" : 1,
+        "nboutputs" : 1,
+        "input-0" : { "mimetype" : "application/octet-stream" },
+        "output-0" : { "mimetype" : "application/json" },
+        "options":['format'],
+        "results" : []
+    }
+task_descriptions['prestoprime.tasks.extractkeyframes'] = {
+        "nbinputs" : 1,
+        "nboutputs" : 1,
+        "input-0" : { "mimetype" : "application/octet-stream" },
+        "output-0" : { "mimetype" : "application/zip" },
+        "options":['format'],
         "results" : []
     }
 

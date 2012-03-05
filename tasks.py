@@ -27,20 +27,22 @@ from celery.task import task
 import logging
 import subprocess
 import tempfile
+import json
 from subprocess import Popen, PIPE
 from celery.task.sets import subtask
 from cStringIO import StringIO
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.files.base import ContentFile
+from dataservice.tasks import _get_mfile
+from dataservice.tasks import _save_joboutput
+from zipfile import ZipFile
 
 @task
 def mxftechmdextractor(inputs,outputs,options={},callbacks=[]):
     try:
         mfileid = inputs[0]
 
-        from dataservice.models import MFile
-        mf = MFile.objects.get(id=mfileid)
-        inputfile = mf.file.path
+        inputfile = _get_mfile(mfileid)
 
         joboutput = outputs[0]
 
@@ -49,13 +51,32 @@ def mxftechmdextractor(inputs,outputs,options={},callbacks=[]):
             logging.info("Inputfile  %s does not exist" % (inputfile))
             return False
 
-        args = ["/home/mm/dev/MXFTechMDExtractorPlugin/bin/run.sh",inputfile]
-        cmd = " ".join(args)
-        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+	tempout=tempfile.NamedTemporaryFile()
+	logging.info("temp file: %s" % tempout.name)
 
-        from jobservice.models import JobOutput
+        args = ["java -cp /opt/rai/mxftechmdextractor/mxftechmdextractor-last.jar eu.prestoprime.mxftools.test.JustRun",inputfile]
+        cmd = " ".join(args)
+        #p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+        p = Popen(cmd, shell=True, stdout=tempout, stderr=PIPE, close_fds=True)
+	p.wait()
+	#(stdout, stderr) = p.communicate()
+	#print("stdout"+stdout)
+	#print("stderr"+stderr)
+	#tempout.close()
+	tempout.flush()
+
+	import ConfigParser
+	# ensure case is maintained
+	config = ConfigParser.RawConfigParser()
+	config.optionxform = str
+	config.read(tempout.name)
+	mxfinfo = dict(config.items("INFO"))
+	print(mxfinfo)
+
+        from mserve.jobservice.models import JobOutput
         jo = JobOutput.objects.get(id=joboutput)
-        jo.file.save('mxftechmdextractor.txt', ContentFile(p.stdout.read()), save=True)
+        #jo.file.save('mxftechmdextractor.txt', ContentFile(p.stdout.read()), save=True)
+        jo.file.save('mxftechmdextractor', ContentFile(json.dumps(mxfinfo,indent=4)), save=True)
 
         for callback in callbacks:
             subtask(callback).delay()
@@ -70,9 +91,7 @@ def d10mxfchecksum(inputs,outputs,options={},callbacks=[]):
         mfileid = inputs[0]
         joboutput = outputs[0]
 
-        from dataservice.models import MFile
-        mf = MFile.objects.get(id=mfileid)
-        inputfile = mf.file.path
+        inputfile = _get_mfile(mfileid)
         outputfile = tempfile.NamedTemporaryFile()
 
         logging.info("Processing d10mxfchecksum job on %s" % (inputfile))
@@ -108,10 +127,8 @@ def mxfframecount(inputs,outputs,options={},callbacks=[]):
 
     try:
         mfileid = inputs[0]
-        from dataservice.models import MFile
-        mf = MFile.objects.get(id=mfileid)
-        inputfile = mf.file.path
 
+        inputfile = _get_mfile(mfileid)
         outputfile = tempfile.NamedTemporaryFile()
         logging.info("Processing mxfframecount job on %s" % (inputfile))
 
@@ -148,10 +165,8 @@ def mxfframecount(inputs,outputs,options={},callbacks=[]):
 def extractd10frame(inputs,outputs,options={},callbacks=[],**kwargs):
     try:
         mfileid = inputs[0]
-        from dataservice.models import MFile
-        mf = MFile.objects.get(id=mfileid)
-        inputfile = mf.file.path
 
+        inputfile = _get_mfile(mfileid)
         joboutput = outputs[0]
         frame = str(options['frame'])
 
@@ -187,4 +202,83 @@ def extractd10frame(inputs,outputs,options={},callbacks=[],**kwargs):
         logging.info("Error with extractd10frame %s" % e)
         raise e
 
+@task
+def ffprobe(inputs,outputs,options={},callbacks=[]):
+    try:
+        mfileid = inputs[0]
 
+        inputfile = _get_mfile(mfileid)
+        joboutput = outputs[0]
+        
+	logging.info("Processing ffprobe job on %s" % (inputfile))
+        if not os.path.exists(inputfile):
+            logging.info("Inputfile  %s does not exist" % (inputfile))
+            return False
+
+	print_format=options["format"]
+	if print_format not in ["default","compact","csv","json","xml"]:
+		print_format="json"
+
+	# Requires ffprobe >=0.9
+        args = ["ffprobe -v quiet -print_format",print_format,"-show_format -show_streams",inputfile]
+        cmd = " ".join(args)
+        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+
+        from mserve.jobservice.models import JobOutput
+        jo = JobOutput.objects.get(id=joboutput)
+        jo.file.save('ffprobe.txt', ContentFile(p.stdout.read()), save=True)
+	#(stdout, stderr) = p.communicate()
+	#print(stdout)
+	#print(stderr)
+	#ffprobe_output = json.loads(stdout)	
+	#ret = {"success":True}
+	#ret["ffprobe"] = ffprobe_output
+
+        for callback in callbacks:
+            subtask(callback).delay()
+
+        return {"success":True, "message":"ffprobe successful"}
+    except Exception as e:
+        logging.info("Error with ffprobe %s" % e)
+        raise e
+
+def zipdir(dir, zipfile):
+	files = os.listdir(dir)
+        z = ZipFile(zipfile, "w")
+        for f in files:
+                if os.path.isfile(dir+'/'+f):
+                        print('zipping '+dir+'/'+f)
+                        z.write(dir+'/'+f, f)
+        z.close()
+	return z
+
+@task
+def extractkeyframes(inputs,outputs,options={},callbacks=[]):
+    try:
+	mfileid=inputs[0]
+	videopath=_get_mfile(mfileid)
+
+	tempdir = tempfile.mkdtemp()
+	logging.info("temp dir: %s" % (tempdir))
+
+	# extract all I frames that are no closer than 5 seconds apart
+	args = ["ffmpeg -i",videopath,"-vf select='eq(pict_type\,I)*(isnan(prev_selected_t)+gte(t-prev_selected_t\,5))' -vsync 0 -f image2", tempdir+"/%09d.jpg"]
+	cmd = " ".join(args)
+        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+	(stdout,stderr) = p.communicate()
+
+	results_file = tempdir+"/results.zip"
+	zipdir(tempdir, results_file)			
+
+	results = open(results_file, 'r')
+        # make job outputs available
+        _save_joboutput(outputs[0], results)
+        results.close()
+
+        for callback in callbacks:
+            subtask(callback).delay()
+
+        return {"success":True, "message":"keyframe extraction successful"}
+    except Exception as e:
+        logging.info("Error with keyframe extraction %s" % e)
+        raise e
