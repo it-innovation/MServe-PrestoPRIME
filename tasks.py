@@ -73,7 +73,7 @@ def mxftechmdextractor(inputs,outputs,options={},callbacks=[]):
 	mxfinfo = dict(config.items("INFO"))
 	print(mxfinfo)
 
-        from mserve.jobservice.models import JobOutput
+        from jobservice.models import JobOutput
         jo = JobOutput.objects.get(id=joboutput)
         #jo.file.save('mxftechmdextractor.txt', ContentFile(p.stdout.read()), save=True)
         jo.file.save('mxftechmdextractor', ContentFile(json.dumps(mxfinfo,indent=4)), save=True)
@@ -224,7 +224,7 @@ def ffprobe(inputs,outputs,options={},callbacks=[]):
         cmd = " ".join(args)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 
-        from mserve.jobservice.models import JobOutput
+        from jobservice.models import JobOutput
         jo = JobOutput.objects.get(id=joboutput)
         jo.file.save('ffprobe.txt', ContentFile(p.stdout.read()), save=True)
 	#(stdout, stderr) = p.communicate()
@@ -282,3 +282,37 @@ def extractkeyframes(inputs,outputs,options={},callbacks=[]):
     except Exception as e:
         logging.info("Error with keyframe extraction %s" % e)
         raise e
+
+
+@task(default_retry_delay=15,max_retries=3)
+def sha1file(inputs,outputs,options={},callbacks=[]):
+
+    """Return hex sha1 digest for a Django FieldFile"""
+    try:
+        mfileid = inputs[0]
+        path = _get_mfile(mfileid)
+        file = open(path,'r')
+        sha1 = hashlib.sha1()
+        while True:
+            data = file.read(8192)  # multiple of 128 bytes is best
+            if not data:
+                break
+            sha1.update(data)
+        file.close()
+        sha1string = sha1.hexdigest()
+        logging.info("SHA1 calclated %s" % (sha1string))
+
+	# TODO: move to dataservice and store checksum in file?
+        #from dataservice.models import MFile
+        #_mf = MFile.objects.get(id=mfileid)
+        #_mf.checksum = md5string
+        #_mf.save()
+
+        for callback in callbacks:
+            logging.info("Running Callback %s" % callback)
+            subtask(callback).delay()
+
+        return {"success":True,"message":"SHA1 successful", "sha1" : sha1string}
+    except Exception, e:
+        logging.info("Error with sha1 %s" % e)
+        raise

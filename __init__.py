@@ -71,6 +71,13 @@ task_descriptions['prestoprime.tasks.extractkeyframes'] = {
         "options":['format'],
         "results" : []
     }
+task_descriptions['prestoprime.tasks.sha1'] = {
+        "nbinputs" : 1,
+        "nboutputs" : 0,
+        "input-0" : { "mimetype" : "application/octet-stream" },
+        "options":[],
+        "results" : []
+    }
 
 import settings
 if settings.PRESTOPRIME:
