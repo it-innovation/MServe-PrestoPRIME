@@ -78,6 +78,22 @@ task_descriptions['prestoprime.tasks.sha1'] = {
         "options":[],
         "results" : []
     }
+task_descriptions['prestoprime.tasks.ffmpeg2theora'] = {
+        "nbinputs" : 1,
+        "nboutputs" : 1,
+        "input-0" : { "mimetype" : "application/octet-stream" },
+        "output-0" : { "mimetype" : "application/octet-stream" },
+        "options":['args'],
+        "results" : []
+    }
+task_descriptions['prestoprime.tasks.ffmbc'] = {
+        "nbinputs" : 1,
+        "nboutputs" : 1,
+        "input-0" : { "mimetype" : "application/octet-stream" },
+        "output-0" : { "mimetype" : "application/octet-stream" },
+        "options":['args'],
+        "results" : []
+    }
 
 import settings
 if settings.PRESTOPRIME:

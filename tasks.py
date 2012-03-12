@@ -28,6 +28,7 @@ import logging
 import subprocess
 import tempfile
 import json
+import hashlib
 from subprocess import Popen, PIPE
 from celery.task.sets import subtask
 from cStringIO import StringIO
@@ -224,6 +225,8 @@ def ffprobe(inputs,outputs,options={},callbacks=[]):
         cmd = " ".join(args)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 
+	print(p.stderr.read())
+
         from jobservice.models import JobOutput
         jo = JobOutput.objects.get(id=joboutput)
         jo.file.save('ffprobe.txt', ContentFile(p.stdout.read()), save=True)
@@ -284,7 +287,7 @@ def extractkeyframes(inputs,outputs,options={},callbacks=[]):
         raise e
 
 
-@task(default_retry_delay=15,max_retries=3)
+@task(name="prestoprime.tasks.sha1",default_retry_delay=15,max_retries=3)
 def sha1file(inputs,outputs,options={},callbacks=[]):
 
     """Return hex sha1 digest for a Django FieldFile"""
@@ -315,4 +318,66 @@ def sha1file(inputs,outputs,options={},callbacks=[]):
         return {"success":True,"message":"SHA1 successful", "sha1" : sha1string}
     except Exception, e:
         logging.info("Error with sha1 %s" % e)
-        raise
+        raise e
+
+@task(name="prestoprime.tasks.ffmpeg2theora")
+def ffmpeg2theora(inputs,outputs,options={},callbacks=[]):
+    try:
+	mfileid=inputs[0]
+	videopath=_get_mfile(mfileid)
+
+	tempout=tempfile.NamedTemporaryFile()
+	logging.info("temp file: %s" % tempout.name)
+
+	ffmpeg_args=options["args"]
+
+	# extract all I frames that are no closer than 5 seconds apart
+	args = ["ffmpeg2theora -i",videopath,ffmpeg_args,"-o", tempout.name]
+	logging.info(cmd)
+	cmd = " ".join(args)
+        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+	(stdout,stderr) = p.communicate()
+	logging.info(stdout)
+	logging.info(stderr)
+
+        # make job outputs available
+        _save_joboutput(outputs[0], tempout)
+
+        for callback in callbacks:
+            subtask(callback).delay()
+
+        return {"success":True, "message":"ffmpeg2theora successful"}
+    except Exception as e:
+        logging.info("Error with ffmpeg2theora %s" % e)
+        raise e
+
+@task(name="prestoprime.tasks.ffmbc")
+def ffmbc(inputs,outputs,options={},callbacks=[]):
+    try:
+	mfileid=inputs[0]
+	videopath=_get_mfile(mfileid)
+
+	tempout=tempfile.NamedTemporaryFile()
+	logging.info("temp file: %s" % tempout.name)
+
+	ffmpeg_args=options["args"]
+
+	# extract all I frames that are no closer than 5 seconds apart
+	args = ["ffmbc -y -i",videopath,ffmpeg_args,tempout.name]
+	cmd = " ".join(args)
+	logging.info(cmd)
+        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+	(stdout,stderr) = p.communicate()
+	logging.info(stdout)
+	logging.info(stderr)
+
+        # make job outputs available
+        _save_joboutput(outputs[0], tempout)
+
+        for callback in callbacks:
+            subtask(callback).delay()
+
+        return {"success":True, "message":"ffmbc successful"}
+    except Exception as e:
+        logging.info("Error with ffmbc %s" % e)
+        raise e
