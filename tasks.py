@@ -60,6 +60,8 @@ def mxftechmdextractor(inputs,outputs,options={},callbacks=[]):
         #p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
         p = Popen(cmd, shell=True, stdout=tempout, stderr=PIPE, close_fds=True)
 	p.wait()
+	if p.returncode != 0:
+		raise Exception("Command %s exited with code %d. Stderr: %s" % (cmd, p.returncode, stderr))
 	#(stdout, stderr) = p.communicate()
 	#print("stdout"+stdout)
 	#print("stderr"+stderr)
@@ -84,7 +86,7 @@ def mxftechmdextractor(inputs,outputs,options={},callbacks=[]):
 
         return {"success":True,"message":"MXFTechMDExtractorPlugin successful"}
     except Exception as e:
-        logging.info("Error with mxftechmdextractor %s" % e)
+        logging.info("Error with mxftechmdextractor. %s" % e)
         raise e
 @task
 def d10mxfchecksum(inputs,outputs,options={},callbacks=[]):
@@ -152,7 +154,7 @@ def mxfframecount(inputs,outputs,options={},callbacks=[]):
         frames = frames -1
 
         import dataservice.usage_store as usage_store
-        usage_store.record(mf.id,"http://prestoprime/mxf_frames_ingested",frames)
+        usage_store.record(mfileid,"http://prestoprime/mxf_frames_ingested",frames)
 
         for callback in callbacks:
             subtask(callback).delay()
@@ -225,11 +227,15 @@ def ffprobe(inputs,outputs,options={},callbacks=[]):
         cmd = " ".join(args)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 
-	print(p.stderr.read())
+	# communicate() is preferred to stdout.read()
+	(stdout, stderr) = p.communicate()
+
+	if p.returncode != 0:
+		raise Exception("Command %s exited with code %d. Stderr: %s" % (cmd, p.returncode, stderr))
 
         from jobservice.models import JobOutput
         jo = JobOutput.objects.get(id=joboutput)
-        jo.file.save('ffprobe.txt', ContentFile(p.stdout.read()), save=True)
+        jo.file.save('ffprobe.txt', ContentFile(stdout), save=True)
 	#(stdout, stderr) = p.communicate()
 	#print(stdout)
 	#print(stderr)
@@ -242,7 +248,7 @@ def ffprobe(inputs,outputs,options={},callbacks=[]):
 
         return {"success":True, "message":"ffprobe successful"}
     except Exception as e:
-        logging.info("Error with ffprobe %s" % e)
+        logging.info("Error with ffprobe. %s" % e)
         raise e
 
 def zipdir(dir, zipfile):
@@ -269,6 +275,10 @@ def extractkeyframes(inputs,outputs,options={},callbacks=[]):
 	cmd = " ".join(args)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 	(stdout,stderr) = p.communicate()
+	logging.info(stdout)
+
+	if p.returncode != 0:
+		raise Exception("Command %s exited with code %d. Stderr: %s" % (cmd, p.returncode, stderr))
 
 	results_file = tempdir+"/results.zip"
 	zipdir(tempdir, results_file)			
@@ -303,7 +313,7 @@ def sha1file(inputs,outputs,options={},callbacks=[]):
             sha1.update(data)
         file.close()
         sha1string = sha1.hexdigest()
-        logging.info("SHA1 calclated %s" % (sha1string))
+        logging.info("SHA1 calculated %s" % (sha1string))
 
 	# TODO: move to dataservice and store checksum in file?
         #from dataservice.models import MFile
@@ -333,12 +343,14 @@ def ffmpeg2theora(inputs,outputs,options={},callbacks=[]):
 
 	# extract all I frames that are no closer than 5 seconds apart
 	args = ["ffmpeg2theora -i",videopath,ffmpeg_args,"-o", tempout.name]
-	logging.info(cmd)
 	cmd = " ".join(args)
+	logging.info(cmd)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 	(stdout,stderr) = p.communicate()
 	logging.info(stdout)
-	logging.info(stderr)
+
+	if p.returncode != 0:
+		raise Exception("Command %s exited with code %d. Stderr: %s" % (cmd, p.returncode, stderr))
 
         # make job outputs available
         _save_joboutput(outputs[0], tempout)
@@ -348,7 +360,7 @@ def ffmpeg2theora(inputs,outputs,options={},callbacks=[]):
 
         return {"success":True, "message":"ffmpeg2theora successful"}
     except Exception as e:
-        logging.info("Error with ffmpeg2theora %s" % e)
+        logging.info("Error with ffmpeg2theora. %s" % e)
         raise e
 
 @task(name="prestoprime.tasks.ffmbc")
@@ -369,7 +381,9 @@ def ffmbc(inputs,outputs,options={},callbacks=[]):
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 	(stdout,stderr) = p.communicate()
 	logging.info(stdout)
-	logging.info(stderr)
+
+	if p.returncode != 0:
+		raise Exception("Command %s exited with code %d. Stderr: %s" % (cmd, p.returncode, stderr))
 
         # make job outputs available
         _save_joboutput(outputs[0], tempout)
@@ -379,5 +393,5 @@ def ffmbc(inputs,outputs,options={},callbacks=[]):
 
         return {"success":True, "message":"ffmbc successful"}
     except Exception as e:
-        logging.info("Error with ffmbc %s" % e)
+        logging.info("Error with ffmbc %s." % e)
         raise e
