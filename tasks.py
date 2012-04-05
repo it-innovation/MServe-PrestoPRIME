@@ -270,8 +270,11 @@ def extractkeyframes(inputs,outputs,options={},callbacks=[]):
 	tempdir = tempfile.mkdtemp()
 	logging.info("temp dir: %s" % (tempdir))
 
-	# extract all I frames that are no closer than 5 seconds apart
-	args = ["ffmpeg -i",videopath,"-vf select='eq(pict_type\,I)*(isnan(prev_selected_t)+gte(t-prev_selected_t\,5))' -vsync 0 -f image2", tempdir+"/%09d.jpg"]
+	interval = options['interval']
+
+	# extract all I frames that are no closer than 'interval'  seconds apart
+	ffmpeg_args = "-vf select='eq(pict_type\,I)*(isnan(prev_selected_t)+gte(t-prev_selected_t\,%s))' -vsync 0 -f image2" % (interval)
+        args = ["ffmpeg -i",videopath, ffmpeg_args, tempdir+"/%09d.jpg"]
 	cmd = " ".join(args)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
 	(stdout,stderr) = p.communicate()

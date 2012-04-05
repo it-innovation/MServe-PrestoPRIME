@@ -68,7 +68,7 @@ task_descriptions['prestoprime.tasks.extractkeyframes'] = {
         "nboutputs" : 1,
         "input-0" : { "mimetype" : "application/octet-stream" },
         "output-0" : { "mimetype" : "application/zip" },
-        "options":['format'],
+        "options":['interval'],
         "results" : []
     }
 task_descriptions['prestoprime.tasks.sha1'] = {
