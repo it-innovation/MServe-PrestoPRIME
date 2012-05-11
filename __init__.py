@@ -94,6 +94,14 @@ task_descriptions['prestoprime.tasks.ffmbc'] = {
         "options":['args'],
         "results" : []
     }
+task_descriptions['prestoprime.tasks.extractfragment'] = {
+        "nbinputs" : 1,
+        "nboutputs" : 1,
+        "input-0" : { "mimetype" : "application/octet-stream" },
+        "output-0" : { "mimetype" : "application/octet-stream" },
+        "options":['intime','fragmentlength'],
+        "results" : []
+    }
 
 import settings
 if settings.PRESTOPRIME:

@@ -398,3 +398,39 @@ def ffmbc(inputs,outputs,options={},callbacks=[]):
     except Exception as e:
         logging.info("Error with ffmbc %s." % e)
         raise e
+
+@task
+def extractfragment(inputs,outputs,options={},callbacks=[]):
+    try:
+	mfileid=inputs[0]
+	videopath=_get_mfile(mfileid)
+
+	tempout=tempfile.NamedTemporaryFile(suffix=".mp4")
+	logging.info("temp file: %s" % tempout.name)
+
+	intime=options["intime"]
+	fragmentlength=options["fragmentlength"]
+
+	# extract 'fragmentlength' video fragment starting at 'intime' (seconds)
+	# ffmpeg -ss 00:00:30.0 -t 00:00:10.0 -i input.wmv -acodec copy -vcodec copy -async 1 output.wmv
+	args = ["ffmpeg -y -ss",intime,"-t",fragmentlength,"-i",videopath,"-acodec copy -vcodec copy -async 1",tempout.name]
+	cmd = " ".join(args)
+	logging.info(cmd)
+        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True)
+	(stdout,stderr) = p.communicate()
+	logging.info(stdout)
+
+	if p.returncode != 0:
+		raise Exception("Command %s exited with code %d. Stderr: %s" % (cmd, p.returncode, stderr))
+
+        # make job outputs available
+        _save_joboutput(outputs[0], tempout)
+
+        for callback in callbacks:
+            subtask(callback).delay()
+
+        return {"success":True, "message":"extractfragment successful"}
+    except Exception as e:
+        logging.info("Error with extractfragment %s." % e)
+        raise e
+
