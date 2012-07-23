@@ -1,8 +1,6 @@
 # Do PrestoPRIME setup
 PRESTOPRIME = True
-DEFAULT_DELIVERY_SUCCESS_CONSTANT_MIN = 15.0
-DEFAULT_DELIVERY_SUCCESS_MULTIPLIER_GB = 1.0
-DELIVERY_SUCCESS_METRIC = "http://mserve/deliverySuccess"
+
 if PRESTOPRIME:
     CELERY_IMPORTS += ("prestoprime.tasks",)
     INSTALLED_APPS += ('prestoprime',)
